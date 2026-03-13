@@ -20,14 +20,21 @@ axiosInstance.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config
-    if (error.response?.status === 401 && !originalRequest._retry) {
+
+    // Skip token refresh for auth endpoints — just pass the error through
+    const isAuthEndpoint = originalRequest.url?.includes('/auth/login/') ||
+                           originalRequest.url?.includes('/auth/register/') ||
+                           originalRequest.url?.includes('/auth/token/refresh/')
+
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       originalRequest._retry = true
       try {
         const refresh = localStorage.getItem('refresh_token')
         if (!refresh) throw new Error('No refresh token')
+
         const res = await axios.post(`${API_BASE_URL}/auth/token/refresh/`, { refresh })
-        const newAccess   = res.data.access
-        const newRefresh  = res.data.refresh  // backend now rotates — always store latest
+        const newAccess  = res.data.access
+        const newRefresh = res.data.refresh
 
         localStorage.setItem('access_token', newAccess)
         if (newRefresh) localStorage.setItem('refresh_token', newRefresh)
@@ -41,6 +48,7 @@ axiosInstance.interceptors.response.use(
         window.dispatchEvent(new Event('auth:logout'))
       }
     }
+
     return Promise.reject(error)
   }
 )
